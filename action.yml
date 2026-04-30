@@ -1,0 +1,70 @@
+name: MCPGuard
+description: >
+  Security scanner, protocol validator, and benchmark suite for MCP servers.
+  Scans your server for MCP spec compliance and outputs a structured report.
+author: Pierfrancesco Lijoi
+
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  target:
+    description: >
+      Shell command to launch the MCP server to scan.
+      Example: "python server.py" or "npx -y @modelcontextprotocol/server-everything"
+    required: true
+  output:
+    description: "Output format: json or markdown"
+    required: false
+    default: json
+  fail-on-error:
+    description: "Exit with a non-zero code if any protocol check fails"
+    required: false
+    default: "true"
+
+outputs:
+  report-path:
+    description: "Path to the generated report file"
+    value: ${{ steps.scan.outputs.report-path }}
+  passed:
+    description: "Whether all protocol checks passed (true or false)"
+    value: ${{ steps.scan.outputs.passed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install MCPGuard
+      shell: bash
+      run: pip install --quiet "${{ github.action_path }}"
+
+    - name: Run MCPGuard scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+        REPORT_FILE="mcpguard-report.${{ inputs.output }}"
+        mcpguard scan "${{ inputs.target }}" --output "${{ inputs.output }}" | tee "$REPORT_FILE"
+        EXIT_CODE=${PIPESTATUS[0]}
+        echo "report-path=$REPORT_FILE" >> "$GITHUB_OUTPUT"
+        if [ "$EXIT_CODE" -eq 0 ]; then
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+        fi
+        if [ "${{ inputs.fail-on-error }}" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+          exit "$EXIT_CODE"
+        fi
+
+    - name: Upload report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: mcpguard-report
+        path: mcpguard-report.${{ inputs.output }}
+        if-no-files-found: warn

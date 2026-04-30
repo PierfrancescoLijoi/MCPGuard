@@ -1,0 +1,22 @@
+name: MCP Server Compliance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  mcpguard:
+    name: Protocol compliance scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan MCP server
+        uses: PierfrancescoLijoi/MCPGuard@v0.1.0
+        with:
+          target: "python my_mcp_server.py"
+          output: json
+          fail-on-error: "true"
