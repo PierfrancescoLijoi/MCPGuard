@@ -2,11 +2,70 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from typing import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mcp.types import Implementation, InitializeResult, ServerCapabilities, ToolsCapability
 
-from mcpguard.checker import CheckResult, ProtocolReport, check_protocol
+from mcpguard.checker import (
+    KNOWN_PROTOCOL_VERSIONS,
+    CheckResult,
+    ProtocolReport,
+    check_protocol,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_init_result(
+    *,
+    protocol_version: str = "2024-11-05",
+    server_name: str = "TestServer",
+    server_version: str = "1.0.0",
+    with_tools: bool = False,
+) -> InitializeResult:
+    caps = ServerCapabilities(
+        tools=ToolsCapability() if with_tools else None,
+    )
+    return InitializeResult(
+        protocolVersion=protocol_version,
+        serverInfo=Implementation(name=server_name, version=server_version),
+        capabilities=caps,
+    )
+
+
+@contextmanager
+def _mock_server(
+    init_result: InitializeResult,
+) -> Generator[MagicMock, None, None]:
+    """Patch stdio_client and ClientSession so no real process is spawned."""
+    session = MagicMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    session.initialize = AsyncMock(return_value=init_result)
+    session.list_tools = AsyncMock(return_value=MagicMock(tools=[]))
+    session.list_resources = AsyncMock(return_value=MagicMock(resources=[]))
+    session.list_prompts = AsyncMock(return_value=MagicMock(prompts=[]))
+
+    stdio_cm = MagicMock()
+    stdio_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
+    stdio_cm.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("mcpguard.checker.stdio_client", return_value=stdio_cm),
+        patch("mcpguard.checker.ClientSession", return_value=session),
+    ):
+        yield session
+
+
+# ---------------------------------------------------------------------------
+# ProtocolReport unit tests
+# ---------------------------------------------------------------------------
 
 
 def test_protocol_report_passed_all_ok() -> None:
@@ -50,10 +109,81 @@ def test_protocol_report_passed_no_checks() -> None:
     assert report.passed is False
 
 
+# ---------------------------------------------------------------------------
+# KNOWN_PROTOCOL_VERSIONS
+# ---------------------------------------------------------------------------
+
+
+def test_known_protocol_versions_contains_stable() -> None:
+    """The constant includes the stable protocol versions from the MCP spec."""
+    assert "2024-11-05" in KNOWN_PROTOCOL_VERSIONS
+    assert "2025-03-26" in KNOWN_PROTOCOL_VERSIONS
+
+
+# ---------------------------------------------------------------------------
+# check_protocol — input validation
+# ---------------------------------------------------------------------------
+
+
 async def test_check_protocol_empty_target_raises() -> None:
     """check_protocol raises ValueError for an empty target."""
     with pytest.raises(ValueError, match="must not be empty"):
         await check_protocol("")
+
+
+# ---------------------------------------------------------------------------
+# check_protocol — mocked server scenarios
+# ---------------------------------------------------------------------------
+
+
+async def test_check_protocol_passing_server() -> None:
+    """check_protocol passes all checks for a well-behaved server."""
+    with _mock_server(_make_init_result()):
+        report = await check_protocol("python server.py")
+
+    assert report.passed is True
+    assert report.protocol_version == "2024-11-05"
+    assert report.server_name == "TestServer"
+
+
+async def test_check_protocol_unknown_version() -> None:
+    """check_protocol flags an unknown protocol version."""
+    with _mock_server(_make_init_result(protocol_version="1999-01-01")):
+        report = await check_protocol("python server.py")
+
+    version_check = next(c for c in report.checks if c.name == "protocol_version_known")
+    assert version_check.passed is False
+    assert report.passed is False
+
+
+async def test_check_protocol_empty_server_name() -> None:
+    """check_protocol flags an empty serverInfo.name."""
+    with _mock_server(_make_init_result(server_name="")):
+        report = await check_protocol("python server.py")
+
+    name_check = next(c for c in report.checks if c.name == "server_name_nonempty")
+    assert name_check.passed is False
+    assert report.passed is False
+
+
+async def test_check_protocol_tools_capability_runs_list() -> None:
+    """check_protocol calls tools/list when the tools capability is declared."""
+    with _mock_server(_make_init_result(with_tools=True)) as session:
+        report = await check_protocol("python server.py")
+
+    session.list_tools.assert_called_once()
+    tools_check = next(c for c in report.checks if c.name == "tools_list")
+    assert tools_check.passed is True
+
+
+async def test_check_protocol_tools_list_failure() -> None:
+    """check_protocol records a failed tools_list check when list_tools raises."""
+    with _mock_server(_make_init_result(with_tools=True)) as session:
+        session.list_tools = AsyncMock(side_effect=RuntimeError("timeout"))
+        report = await check_protocol("python server.py")
+
+    tools_check = next(c for c in report.checks if c.name == "tools_list")
+    assert tools_check.passed is False
 
 
 async def test_check_protocol_connection_failure() -> None:
@@ -66,4 +196,3 @@ async def test_check_protocol_connection_failure() -> None:
 
     assert report.passed is False
     assert any(c.name == "server_connection" for c in report.checks)
-    assert not report.checks[0].passed

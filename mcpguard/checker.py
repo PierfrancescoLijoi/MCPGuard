@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
+KNOWN_PROTOCOL_VERSIONS: frozenset[str] = frozenset({"2024-11-05", "2025-03-26"})
+
 
 @dataclass
 class CheckResult:
@@ -38,7 +40,9 @@ async def check_protocol(target: str) -> ProtocolReport:
     """Run protocol compliance checks against an MCP server.
 
     Connects to the server via stdio, performs the initialize handshake,
-    and validates the response against the MCP specification.
+    and validates the response against the MCP specification. If the server
+    declares tool, resource, or prompt capabilities, the corresponding list
+    methods are also exercised.
 
     Args:
         target: Shell command to launch the MCP server (e.g. "python server.py").
@@ -77,6 +81,7 @@ async def check_protocol(target: str) -> ProtocolReport:
                         checks=checks,
                     )
 
+                # 1. initialize_handshake
                 checks.append(
                     CheckResult(
                         name="initialize_handshake",
@@ -85,6 +90,7 @@ async def check_protocol(target: str) -> ProtocolReport:
                     )
                 )
 
+                # 2. protocol_version_present
                 protocol_version: str = init_result.protocolVersion
                 checks.append(
                     CheckResult(
@@ -98,6 +104,23 @@ async def check_protocol(target: str) -> ProtocolReport:
                     )
                 )
 
+                # 3. protocol_version_known
+                checks.append(
+                    CheckResult(
+                        name="protocol_version_known",
+                        passed=protocol_version in KNOWN_PROTOCOL_VERSIONS,
+                        message=(
+                            f"Protocol version {protocol_version!r} is recognised"
+                            if protocol_version in KNOWN_PROTOCOL_VERSIONS
+                            else (
+                                f"Unknown protocol version {protocol_version!r}; "
+                                f"known: {sorted(KNOWN_PROTOCOL_VERSIONS)}"
+                            )
+                        ),
+                    )
+                )
+
+                # 4. server_info_present
                 server_info = init_result.serverInfo
                 checks.append(
                     CheckResult(
@@ -110,6 +133,83 @@ async def check_protocol(target: str) -> ProtocolReport:
                         ),
                     )
                 )
+
+                # 5. server_name_nonempty
+                if server_info is not None:
+                    checks.append(
+                        CheckResult(
+                            name="server_name_nonempty",
+                            passed=bool(server_info.name),
+                            message=(
+                                f"Server name: {server_info.name!r}"
+                                if server_info.name
+                                else "serverInfo.name is empty"
+                            ),
+                        )
+                    )
+
+                # Capability-specific checks
+                caps = init_result.capabilities
+
+                # 6. tools/list
+                if caps is not None and caps.tools is not None:
+                    try:
+                        await session.list_tools()
+                        checks.append(
+                            CheckResult(
+                                name="tools_list",
+                                passed=True,
+                                message="tools/list responded successfully",
+                            )
+                        )
+                    except Exception as exc:
+                        checks.append(
+                            CheckResult(
+                                name="tools_list",
+                                passed=False,
+                                message=f"tools/list failed: {exc}",
+                            )
+                        )
+
+                # 7. resources/list
+                if caps is not None and caps.resources is not None:
+                    try:
+                        await session.list_resources()
+                        checks.append(
+                            CheckResult(
+                                name="resources_list",
+                                passed=True,
+                                message="resources/list responded successfully",
+                            )
+                        )
+                    except Exception as exc:
+                        checks.append(
+                            CheckResult(
+                                name="resources_list",
+                                passed=False,
+                                message=f"resources/list failed: {exc}",
+                            )
+                        )
+
+                # 8. prompts/list
+                if caps is not None and caps.prompts is not None:
+                    try:
+                        await session.list_prompts()
+                        checks.append(
+                            CheckResult(
+                                name="prompts_list",
+                                passed=True,
+                                message="prompts/list responded successfully",
+                            )
+                        )
+                    except Exception as exc:
+                        checks.append(
+                            CheckResult(
+                                name="prompts_list",
+                                passed=False,
+                                message=f"prompts/list failed: {exc}",
+                            )
+                        )
 
                 return ProtocolReport(
                     target=target,
