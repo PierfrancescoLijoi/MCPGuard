@@ -22,6 +22,7 @@ classifiers = [
 dependencies = [
     "typer>=0.12",
     "pydantic>=2.0",
+    "mcp>=1.0",
 ]
 
 [project.scripts]
@@ -35,6 +36,7 @@ Issues = "https://github.com/PierfrancescoLijoi/MCPGuard/issues"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.23",
     "mypy>=1.10",
     "ruff>=0.4",
 ]
@@ -53,3 +55,4 @@ pretty = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"

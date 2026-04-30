@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import Annotated
+
 import typer
+
+from mcpguard.checker import check_protocol
+from mcpguard.reporter import OutputFormat, render
 
 app = typer.Typer(
     name="mcpguard",
@@ -13,12 +19,35 @@ app = typer.Typer(
 
 @app.command()
 def scan(
-    target: str = typer.Argument(..., help="MCP server command to scan (e.g. 'python server.py')"),
-    output: str = typer.Option("json", "--output", "-o", help="Output format: json, markdown"),
+    target: Annotated[
+        str,
+        typer.Argument(help="MCP server command to scan (e.g. 'python server.py')"),
+    ],
+    output: Annotated[
+        str,
+        typer.Option("--output", "-o", help="Output format: json, markdown"),
+    ] = "json",
 ) -> None:
     """Scan an MCP server for protocol compliance and security issues."""
-    typer.echo(f"Scanning: {target}")
-    typer.echo(f"Output format: {output}")
+    fmt: OutputFormat
+    if output == "json":
+        fmt = "json"
+    elif output == "markdown":
+        fmt = "markdown"
+    else:
+        typer.echo(f"Error: unsupported output format {output!r}. Choose json or markdown.", err=True)
+        raise typer.Exit(code=2)
+
+    try:
+        report = asyncio.run(check_protocol(target))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    typer.echo(render(report, fmt=fmt))
+
+    if not report.passed:
+        raise typer.Exit(code=1)
 
 
 def main() -> None:
