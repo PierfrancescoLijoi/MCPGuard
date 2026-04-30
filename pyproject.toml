@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcpguard"
+version = "0.1.0"
+description = "Security scanner, protocol validator, and benchmark suite for MCP servers"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+authors = [{ name = "Pierfrancesco Lijoi" }]
+keywords = ["mcp", "security", "testing", "ai", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+mcpguard = "mcpguard.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/PierfrancescoLijoi/MCPGuard"
+Repository = "https://github.com/PierfrancescoLijoi/MCPGuard"
+Issues = "https://github.com/PierfrancescoLijoi/MCPGuard/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.10",
+    "ruff>=0.4",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+pretty = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
