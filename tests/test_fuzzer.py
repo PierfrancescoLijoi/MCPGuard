@@ -36,6 +36,20 @@ async def test_fuzzer_skips_dangerous_tools_by_default() -> None:
     invoker.assert_not_called()
 
 
+async def test_fuzzer_skips_camel_case_dangerous_tools_by_default() -> None:
+    invoker = AsyncMock()
+    tools = [
+        SimpleNamespace(
+            name=name,
+            inputSchema={"type": "object", "properties": {}},
+        )
+        for name in ("deleteFile", "writeFile", "runCommand")
+    ]
+    report = await fuzz_tools(tools, invoker)
+    assert report.skipped == ["deleteFile", "writeFile", "runCommand"]
+    invoker.assert_not_called()
+
+
 async def test_fuzzer_enforces_global_call_limit() -> None:
     invoker = AsyncMock(return_value={"content": []})
     tool = SimpleNamespace(
@@ -70,3 +84,15 @@ async def test_fuzzer_accepts_clean_protocol_rejection() -> None:
     report = await fuzz_tools([tool], invoker, max_calls=1)
     assert report.failures == 0
     assert report.results[0].passed is True
+
+
+async def test_fuzzer_accepts_clean_tool_level_rejection() -> None:
+    invoker = AsyncMock(return_value={"isError": True, "content": []})
+    tool = SimpleNamespace(
+        name="echo",
+        inputSchema={"type": "object", "properties": {}},
+    )
+    report = await fuzz_tools([tool], invoker, max_calls=1)
+    assert report.failures == 0
+    assert report.results[0].passed is True
+    assert "rejected cleanly" in report.results[0].message

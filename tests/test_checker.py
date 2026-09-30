@@ -224,6 +224,8 @@ async def test_check_protocol_routes_http_targets_to_http_checker() -> None:
         fuzz=True,
         fuzz_max_calls=25,
         allow_dangerous_tools=False,
+        headers=None,
+        expected_tool_fingerprint=None,
     )
 
 

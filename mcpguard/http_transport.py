@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -13,6 +14,13 @@ MODERN_PROTOCOL_VERSION = "2026-07-28"
 PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
 CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities"
 CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo"
+_RESERVED_HEADERS = {
+    "mcp-protocol-version",
+    "mcp-method",
+    "mcp-name",
+    "content-type",
+    "accept",
+}
 
 
 class McpProtocolError(RuntimeError):
@@ -28,6 +36,7 @@ class ModernHttpClient:
         *,
         client: httpx.AsyncClient | None = None,
         timeout: float = 30.0,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         if not url.startswith(("http://", "https://")):
             raise ValueError("Streamable HTTP target must use http:// or https://")
@@ -36,6 +45,12 @@ class ModernHttpClient:
         self._client = client or httpx.AsyncClient()
         self._timeout = timeout
         self._request_id = 0
+        self._headers = dict(headers or {})
+        overridden = _RESERVED_HEADERS.intersection(
+            key.lower() for key in self._headers
+        )
+        if overridden:
+            raise ValueError("reserved MCP transport headers cannot be overridden")
 
     async def discover(self) -> dict[str, Any]:
         """Discover capabilities without creating a protocol session."""
@@ -74,6 +89,7 @@ class ModernHttpClient:
             "params": request_params,
         }
         headers = {
+            **self._headers,
             "Accept": "application/json, text/event-stream",
             "MCP-Protocol-Version": MODERN_PROTOCOL_VERSION,
             "Mcp-Method": method,

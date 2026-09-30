@@ -15,7 +15,7 @@ inputs:
       Example: "python server.py" or "npx -y @modelcontextprotocol/server-everything"
     required: true
   output:
-    description: "Output format: json or markdown"
+    description: "Output format: json, markdown, or sarif"
     required: false
     default: json
   fail-on-error:
@@ -46,10 +46,22 @@ runs:
     - name: Run MCPGuard scan
       id: scan
       shell: bash
+      env:
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
       run: |
+        case "$INPUT_OUTPUT" in
+          json|markdown|sarif) ;;
+          *) echo "Invalid output format: $INPUT_OUTPUT" >&2; exit 2 ;;
+        esac
+        case "$INPUT_FAIL_ON_ERROR" in
+          true|false) ;;
+          *) echo "fail-on-error must be true or false" >&2; exit 2 ;;
+        esac
         set +e
-        REPORT_FILE="mcpguard-report.${{ inputs.output }}"
-        mcpguard scan "${{ inputs.target }}" --output "${{ inputs.output }}" | tee "$REPORT_FILE"
+        REPORT_FILE="mcpguard-report.$INPUT_OUTPUT"
+        mcpguard scan "$INPUT_TARGET" --output "$INPUT_OUTPUT" | tee "$REPORT_FILE"
         EXIT_CODE=${PIPESTATUS[0]}
         echo "report-path=$REPORT_FILE" >> "$GITHUB_OUTPUT"
         if [ "$EXIT_CODE" -eq 0 ]; then
@@ -57,7 +69,7 @@ runs:
         else
           echo "passed=false" >> "$GITHUB_OUTPUT"
         fi
-        if [ "${{ inputs.fail-on-error }}" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+        if [ "$INPUT_FAIL_ON_ERROR" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
           exit "$EXIT_CODE"
         fi
 
@@ -68,3 +80,9 @@ runs:
         name: mcpguard-report
         path: mcpguard-report.${{ inputs.output }}
         if-no-files-found: warn
+
+    - name: Upload SARIF to GitHub code scanning
+      if: always() && inputs.output == 'sarif'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: mcpguard-report.sarif

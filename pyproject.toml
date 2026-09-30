@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mcpguard"
-version = "0.2.0"
+name = "mcpguard-ci"
+version = "0.3.0"
 description = "CI-native security, compliance, fuzzing, and performance gate for MCP servers"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -38,6 +38,7 @@ Issues = "https://github.com/PierfrancescoLijoi/MCPGuard/issues"
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=6.0",
     "mypy>=1.10",
     "ruff>=0.4",
 ]
@@ -57,3 +58,13 @@ pretty = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcpguard"]
+
+[tool.coverage.run]
+source = ["mcpguard"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

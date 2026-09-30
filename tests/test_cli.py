@@ -102,4 +102,6 @@ def test_scan_passes_fuzz_options_to_checker() -> None:
         fuzz=True,
         fuzz_max_calls=7,
         allow_dangerous_tools=False,
+        headers=None,
+        expected_tool_fingerprint=None,
     )

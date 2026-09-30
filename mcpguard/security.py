@@ -16,21 +16,35 @@ class SecurityFinding:
     severity: str
     tool: str
     message: str
+    owasp_id: str | None = None
 
 
-_SENSITIVE_NAME = re.compile(
-    r"(?:^|[_-])(exec|shell|command|delete|remove|write|upload|download)(?:$|[_-])",
-    re.IGNORECASE,
+_SENSITIVE_NAME_PARTS = (
+    "exec",
+    "shell",
+    "command",
+    "delete",
+    "remove",
+    "write",
+    "upload",
+    "download",
 )
 _SECRET_WORD = re.compile(
     r"\b(password|passwd|secret|api[_ -]?key|access[_ -]?token|private[_ -]?key)\b",
+    re.IGNORECASE,
+)
+_INJECTION = re.compile(
+    r"(?:ignore|disregard).{0,30}(?:instruction|system|previous)|"
+    r"(?:send|upload|exfiltrat).{0,30}(?:secret|credential|token)|"
+    r"do not (?:tell|reveal)|hidden instruction",
     re.IGNORECASE,
 )
 
 
 def is_dangerous_tool_name(name: str) -> bool:
     """Return whether a tool name suggests side effects or command execution."""
-    return _SENSITIVE_NAME.search(name) is not None
+    canonical = re.sub(r"[^a-z0-9]", "", name.lower())
+    return any(part in canonical for part in _SENSITIVE_NAME_PARTS)
 
 
 def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
@@ -55,6 +69,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
                         "Tool exposes a potentially destructive or command-execution "
                         "operation"
                     ),
+                    owasp_id="MCP05",
                 )
             )
 
@@ -65,6 +80,18 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
                     severity="error",
                     tool=name,
                     message="Tool description appears to mention secret material",
+                    owasp_id="MCP01",
+                )
+            )
+
+        if _INJECTION.search(description):
+            findings.append(
+                SecurityFinding(
+                    rule="tool-poisoning",
+                    severity="error",
+                    tool=name,
+                    message="Tool description contains prompt-injection indicators",
+                    owasp_id="MCP03",
                 )
             )
 
@@ -75,6 +102,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
                     severity="error",
                     tool=name,
                     message="Tool inputSchema is missing or is not an object",
+                    owasp_id="MCP03",
                 )
             )
             continue
@@ -86,6 +114,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
                     severity="error",
                     tool=name,
                     message="Tool inputSchema must declare type 'object'",
+                    owasp_id="MCP03",
                 )
             )
 
@@ -96,6 +125,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
                     severity="warning",
                     tool=name,
                     message="Tool schema allows undeclared input properties",
+                    owasp_id="MCP02",
                 )
             )
 

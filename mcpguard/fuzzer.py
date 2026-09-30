@@ -112,11 +112,14 @@ async def fuzz_tools(
                     FuzzResult(
                         tool=name,
                         arguments=arguments,
-                        passed=not is_error,
-                        message="Tool returned an error" if is_error else "Completed",
+                        passed=True,
+                        message=(
+                            "Input rejected cleanly by tool"
+                            if is_error
+                            else "Completed"
+                        ),
                     )
                 )
-                report.failures += int(is_error)
             except McpProtocolError as exc:
                 report.results.append(
                     FuzzResult(

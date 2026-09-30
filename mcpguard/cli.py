@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Annotated
+import os
+from pathlib import Path
+from typing import Annotated, cast
 
 import typer
 
+from mcpguard.baseline import compare_performance
 from mcpguard.benchmark import benchmark_server, benchmark_throughput
 from mcpguard.checker import check_protocol
 from mcpguard.http_transport import ModernHttpClient
@@ -20,6 +23,21 @@ app = typer.Typer(
 )
 
 
+def _auth_headers(values: list[str], bearer_token_env: str | None) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for value in values:
+        name, separator, header_value = value.partition(":")
+        if not separator or not name.strip() or not header_value.strip():
+            raise ValueError("headers must use 'Name: value' format")
+        headers[name.strip()] = header_value.strip()
+    if bearer_token_env:
+        token = os.environ.get(bearer_token_env)
+        if not token:
+            raise ValueError(f"environment variable {bearer_token_env!r} is not set")
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 @app.command()
 def scan(
     target: Annotated[
@@ -28,7 +46,7 @@ def scan(
     ],
     output: Annotated[
         str,
-        typer.Option("--output", "-o", help="Output format: json, markdown"),
+        typer.Option("--output", "-o", help="Output format: json, markdown, sarif"),
     ] = "json",
     fuzz: Annotated[
         bool,
@@ -45,6 +63,19 @@ def scan(
             help="Allow fuzzing tools that appear destructive or execute commands",
         ),
     ] = False,
+    header: Annotated[
+        list[str] | None, typer.Option("--header", help="HTTP header as 'Name: value'")
+    ] = None,
+    bearer_token_env: Annotated[
+        str | None,
+        typer.Option(help="Environment variable containing a bearer token"),
+    ] = None,
+    tool_baseline: Annotated[
+        Path | None, typer.Option(help="Trusted tool fingerprint JSON file")
+    ] = None,
+    write_tool_baseline: Annotated[
+        Path | None, typer.Option(help="Write the observed tool fingerprint")
+    ] = None,
 ) -> None:
     """Scan an MCP server for protocol compliance and security issues."""
     fmt: OutputFormat
@@ -52,23 +83,41 @@ def scan(
         fmt = "json"
     elif output == "markdown":
         fmt = "markdown"
+    elif output == "sarif":
+        fmt = "sarif"
     else:
         typer.echo(
-            f"Error: unsupported output format {output!r}. Choose json or markdown.",
+            f"Error: unsupported output format {output!r}. "
+            "Choose json, markdown or sarif.",
             err=True,
         )
         raise typer.Exit(code=2)
 
     try:
+        headers = _auth_headers(header or [], bearer_token_env)
+        expected_fingerprint = None
+        if tool_baseline:
+            expected_fingerprint = str(
+                json.loads(tool_baseline.read_text(encoding="utf-8"))["fingerprint"]
+            )
         report = asyncio.run(
             check_protocol(
                 target,
                 fuzz=fuzz,
                 fuzz_max_calls=fuzz_max_calls,
                 allow_dangerous_tools=allow_dangerous_tools,
+                headers=headers or None,
+                expected_tool_fingerprint=expected_fingerprint,
             )
         )
-    except ValueError as exc:
+        if write_tool_baseline:
+            if report.tool_fingerprint is None:
+                raise ValueError("target did not advertise tools")
+            write_tool_baseline.write_text(
+                json.dumps({"fingerprint": report.tool_fingerprint}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    except (ValueError, OSError, KeyError, json.JSONDecodeError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
@@ -110,6 +159,13 @@ def load_test_command(
     target: Annotated[str, typer.Argument(help="Streamable HTTP MCP endpoint")],
     requests: Annotated[int, typer.Option("--requests", "-n", min=1)] = 100,
     concurrency: Annotated[int, typer.Option("--concurrency", "-c", min=1)] = 10,
+    baseline: Annotated[
+        Path | None, typer.Option(help="Performance baseline JSON")
+    ] = None,
+    save_baseline: Annotated[
+        Path | None, typer.Option(help="Write current metrics")
+    ] = None,
+    max_regression_percent: Annotated[float, typer.Option(min=0)] = 10.0,
 ) -> None:
     """Measure concurrent server/discover throughput and latency."""
     if not target.startswith(("http://", "https://")):
@@ -144,7 +200,25 @@ def load_test_command(
             await client.aclose()
 
     try:
-        typer.echo(json.dumps(asyncio.run(run()), indent=2))
+        result = asyncio.run(run())
+        if baseline:
+            previous = json.loads(baseline.read_text(encoding="utf-8"))
+            comparison = compare_performance(
+                cast(float, result["p95_ms"]),
+                float(previous["p95_ms"]),
+                max_regression_percent=max_regression_percent,
+            )
+            result["baseline"] = {
+                "passed": comparison.passed,
+                "regression_percent": round(comparison.regression_percent, 3),
+            }
+        if save_baseline:
+            save_baseline.write_text(
+                json.dumps(result, indent=2) + "\n", encoding="utf-8"
+            )
+        typer.echo(json.dumps(result, indent=2))
+        if baseline and not result["baseline"]["passed"]:  # type: ignore[index]
+            raise typer.Exit(code=1)
     except Exception as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc

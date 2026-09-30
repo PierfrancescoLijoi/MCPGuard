@@ -24,6 +24,10 @@ Designed for local development and CI/CD, it turns MCP quality into a repeatable
 release gate: one command can catch protocol regressions, unsafe tool contracts,
 crash-prone input handling, and performance degradation before deployment.
 
+Reports are available as JSON, Markdown, or **SARIF 2.1.0** for GitHub code
+scanning. Findings carry OWASP MCP identifiers where MCPGuard has direct or
+partial evidence; see [the honest coverage matrix](docs/SECURITY_COVERAGE.md).
+
 ```mermaid
 flowchart LR
     A[CI / Developer] -->|server command| B[MCPGuard]
@@ -71,6 +75,10 @@ cd MCPGuard
 pip install .
 ```
 
+After the first PyPI release, install the published distribution from anywhere
+with `pip install mcpguard-ci`. The executable and Python import remain
+`mcpguard`.
+
 ### Scan a Python server
 
 ```bash
@@ -91,6 +99,17 @@ mcpguard scan "https://example.com/mcp"
 
 HTTP targets use the stateless MCP `2026-07-28` envelope, including the required
 `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` routing headers.
+
+Authenticated endpoints can read bearer tokens from the environment without
+putting credentials in source files or CLI history:
+
+```bash
+export MCP_TOKEN="..."
+mcpguard scan "https://example.com/mcp" --bearer-token-env MCP_TOKEN
+```
+
+Additional headers may be repeated with `--header "X-Tenant: acme"`. Reserved
+MCP transport headers cannot be overridden.
 
 ## Opt-in tool fuzzing
 
@@ -179,6 +198,27 @@ reused HTTP connection pool and reports:
 Request count and concurrency are bounded CLI integers; concurrency cannot
 exceed the number of requests.
 
+Save a baseline and fail CI when p95 latency regresses beyond a threshold:
+
+```bash
+mcpguard load-test "$MCP_URL" --save-baseline performance.json
+mcpguard load-test "$MCP_URL" --baseline performance.json \
+  --max-regression-percent 10
+```
+
+## Tool rug-pull detection
+
+Create a deterministic SHA-256 fingerprint of the complete advertised tool
+catalog, then compare future scans against it:
+
+```bash
+mcpguard scan "$MCP_URL" --write-tool-baseline tools.json
+mcpguard scan "$MCP_URL" --tool-baseline tools.json
+```
+
+Changes to names, descriptions, annotations, or schemas fail the gate and force
+an explicit review of the new catalog.
+
 ## GitHub Actions
 
 ```yaml
@@ -189,9 +229,12 @@ on: [push, pull_request]
 jobs:
   mcpguard:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: PierfrancescoLijoi/MCPGuard@v0.1.0
+      - uses: PierfrancescoLijoi/MCPGuard@v0.3.0
         with:
           target: "python my_server.py"
           output: markdown
@@ -200,6 +243,10 @@ jobs:
 
 The action uploads the generated report as the `mcpguard-report` artifact and
 exposes `passed` plus `report-path` outputs.
+
+`security-events: write` is required only when `output: sarif` enables the
+CodeQL upload step. GitHub does not grant that permission to pull requests from
+forks, so use JSON or Markdown for untrusted fork workflows.
 
 ## Exit codes
 
@@ -218,12 +265,16 @@ exposes `passed` plus `report-path` outputs.
 | MCP legacy lifecycle through `2025-11-25` | ✅ Supported over stdio |
 | MCP `2026-07-28` stateless lifecycle | ✅ Supported over Streamable HTTP |
 | JSON and Markdown reports | ✅ Supported |
+| SARIF 2.1.0 / GitHub code scanning | ✅ Supported |
 | Static tool-definition security checks | ✅ Supported |
 | Startup benchmark | ✅ Supported |
 | Tool execution fuzzing | ✅ Opt-in, bounded, destructive tools blocked by default |
 | Load / throughput benchmarking | ✅ Concurrent HTTP benchmark with p50/p95 |
+| Performance regression baselines | ✅ p95 threshold gate |
+| Tool rug-pull detection | ✅ Deterministic catalog fingerprints |
+| OAuth/API token authentication | ✅ Bearer token via environment and custom headers |
 | Legacy Streamable HTTP sessions | 🚧 Not yet supported |
-| Authenticated HTTP endpoints | 🚧 Custom auth configuration not yet supported |
+| Interactive OAuth authorization-code flow | 🚧 Not yet supported |
 
 MCP `2026-07-28` replaced `initialize` with `server/discover`. MCPGuard uses the
 Python SDK for legacy stdio sessions and a dedicated stateless HTTP client for
@@ -237,6 +288,22 @@ uv run ruff check mcpguard/ tests/
 uv run mypy mcpguard/
 uv run pytest
 ```
+
+The test suite includes a deliberately vulnerable catalog under
+`tests/fixtures/` and verifies detection of secret exposure, tool poisoning,
+unsafe execution, malformed schemas, transport errors, and fuzzing crashes.
+
+## Releases and independent comparison
+
+Tag pushes trigger `.github/workflows/release.yml`, which builds wheel and sdist,
+creates a GitHub artifact-provenance attestation, publishes through PyPI Trusted
+Publishing, and attaches the same artifacts to a GitHub release. Configure the
+`pypi` environment and PyPI Trusted Publisher before creating a `v*` tag. The
+distribution is `mcpguard-ci`; the command and Python package remain `mcpguard`.
+
+For repeatable black-box comparisons with MCP Inspector and MCP-Scan, see
+[the comparison protocol](docs/COMPARISON.md). It records raw machine-readable
+results and intentionally avoids unverified marketing claims.
 
 Project layout:
 

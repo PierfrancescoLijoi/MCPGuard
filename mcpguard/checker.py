@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
@@ -11,6 +12,7 @@ from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.types.version import SUPPORTED_PROTOCOL_VERSIONS
 
+from mcpguard.baseline import fingerprint_tools
 from mcpguard.fuzzer import fuzz_tools
 from mcpguard.http_transport import MODERN_PROTOCOL_VERSION, ModernHttpClient
 from mcpguard.security import scan_tool_definitions
@@ -38,6 +40,7 @@ class ProtocolReport:
     server_version: str | None
     protocol_version: str | None
     checks: list[CheckResult] = field(default_factory=list)
+    tool_fingerprint: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -51,6 +54,8 @@ async def check_protocol(
     fuzz: bool = False,
     fuzz_max_calls: int = 25,
     allow_dangerous_tools: bool = False,
+    headers: Mapping[str, str] | None = None,
+    expected_tool_fingerprint: str | None = None,
 ) -> ProtocolReport:
     """Run protocol compliance checks against an MCP server.
 
@@ -74,6 +79,8 @@ async def check_protocol(
             fuzz=fuzz,
             fuzz_max_calls=fuzz_max_calls,
             allow_dangerous_tools=allow_dangerous_tools,
+            headers=headers,
+            expected_tool_fingerprint=expected_tool_fingerprint,
         )
 
     if fuzz:
@@ -205,6 +212,14 @@ async def check_protocol(
                             ),
                         )
                     )
+                    checks.extend(
+                        CheckResult(
+                            name=f"{finding.owasp_id or 'MCP'}:{finding.rule}",
+                            passed=finding.severity != "error",
+                            message=f"{finding.tool}: {finding.message}",
+                        )
+                        for finding in findings
+                    )
                 except Exception as exc:
                     checks.append(
                         CheckResult(
@@ -293,10 +308,13 @@ async def check_http_protocol(
     fuzz: bool = False,
     fuzz_max_calls: int = 25,
     allow_dangerous_tools: bool = False,
+    headers: Mapping[str, str] | None = None,
+    expected_tool_fingerprint: str | None = None,
 ) -> ProtocolReport:
     """Validate a stateless MCP 2026-07-28 Streamable HTTP endpoint."""
     checks: list[CheckResult] = []
-    client = ModernHttpClient(target)
+    client = ModernHttpClient(target, headers=headers)
+    tool_fingerprint: str | None = None
     try:
         discovered = await client.discover()
         checks.append(
@@ -340,10 +358,23 @@ async def check_http_protocol(
 
         if "tools" in capabilities:
             raw_tools = await client.list_tools()
+            tool_fingerprint = fingerprint_tools(raw_tools)
             tools = [_tool_object(tool) for tool in raw_tools]
             checks.append(
                 CheckResult("tools_list", True, "tools/list responded successfully")
             )
+            if expected_tool_fingerprint is not None:
+                checks.append(
+                    CheckResult(
+                        "tool_rug_pull",
+                        tool_fingerprint == expected_tool_fingerprint,
+                        (
+                            "Tool catalog matches the trusted baseline"
+                            if tool_fingerprint == expected_tool_fingerprint
+                            else "Tool catalog changed from the trusted baseline"
+                        ),
+                    )
+                )
             findings = scan_tool_definitions(tools)
             checks.append(
                 CheckResult(
@@ -358,6 +389,14 @@ async def check_http_protocol(
                         else "No static tool-definition vulnerabilities found"
                     ),
                 )
+            )
+            checks.extend(
+                CheckResult(
+                    name=f"{finding.owasp_id or 'MCP'}:{finding.rule}",
+                    passed=finding.severity != "error",
+                    message=f"{finding.tool}: {finding.message}",
+                )
+                for finding in findings
             )
             if fuzz:
                 fuzz_report = await fuzz_tools(
@@ -394,6 +433,7 @@ async def check_http_protocol(
             server_version=server_version or None,
             protocol_version=MODERN_PROTOCOL_VERSION,
             checks=checks,
+            tool_fingerprint=tool_fingerprint,
         )
     except Exception as exc:
         checks.append(

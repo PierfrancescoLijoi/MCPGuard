@@ -1,0 +1,7 @@
+{
+  "tools": [
+    {"name": "MCPGuard", "command": ["mcpguard", "scan", "{target}"]},
+    {"name": "MCP Inspector", "command": ["npx", "@modelcontextprotocol/inspector", "--cli", "{target}", "--method", "tools/list"]},
+    {"name": "MCP-Scan", "command": ["uvx", "mcp-scan@latest", "scan", "{target}"]}
+  ]
+}

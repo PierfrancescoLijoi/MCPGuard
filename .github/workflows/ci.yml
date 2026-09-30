@@ -36,4 +36,12 @@ jobs:
         run: uv run mypy mcpguard/
 
       - name: Test (pytest)
-        run: uv run pytest -v --tb=short
+        run: uv run pytest --cov --cov-report=term-missing -v --tb=short
+
+      - name: Validate release metadata
+        run: uv run python scripts/check_release.py
+
+      - name: Build and validate distributions
+        run: |
+          uv build
+          uv run --with twine twine check dist/*
