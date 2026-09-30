@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from mcp.types import Implementation, InitializeResult, ServerCapabilities, ToolsCapability
+from mcp.types import (
+    Implementation,
+    InitializeResult,
+    ServerCapabilities,
+    ToolsCapability,
+)
 
 from mcpguard.checker import (
     KNOWN_PROTOCOL_VERSIONS,
@@ -15,7 +20,6 @@ from mcpguard.checker import (
     ProtocolReport,
     check_protocol,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -118,6 +122,8 @@ def test_known_protocol_versions_contains_stable() -> None:
     """The constant includes the stable protocol versions from the MCP spec."""
     assert "2024-11-05" in KNOWN_PROTOCOL_VERSIONS
     assert "2025-03-26" in KNOWN_PROTOCOL_VERSIONS
+    assert "2025-06-18" in KNOWN_PROTOCOL_VERSIONS
+    assert "2025-11-25" in KNOWN_PROTOCOL_VERSIONS
 
 
 # ---------------------------------------------------------------------------

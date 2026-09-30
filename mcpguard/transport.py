@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import shlex
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -29,7 +29,9 @@ async def stdio_session(command: str) -> AsyncGenerator[ClientSession, None]:
 
     params = StdioServerParameters(command=parts[0], args=parts[1:])
 
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    async with (
+        stdio_client(params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        yield session

@@ -76,7 +76,9 @@ def test_scan_markdown_output() -> None:
     """scan emits Markdown when --output markdown is passed."""
     with patch("mcpguard.cli.check_protocol", new_callable=AsyncMock) as mock_check:
         mock_check.return_value = _passing_report()
-        result = runner.invoke(app, ["scan", "python server.py", "--output", "markdown"])
+        result = runner.invoke(
+            app, ["scan", "python server.py", "--output", "markdown"]
+        )
     assert result.exit_code == 0
     assert "PASSED" in result.output
 

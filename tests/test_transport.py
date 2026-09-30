@@ -37,7 +37,9 @@ async def test_whitespace_only_command_raises() -> None:
         ),
     ],
 )
-def test_command_parsing(command: str, expected_exe: str, expected_args: list[str]) -> None:
+def test_command_parsing(
+    command: str, expected_exe: str, expected_args: list[str]
+) -> None:
     """shlex.split correctly tokenises MCP server launch commands."""
     import shlex
 

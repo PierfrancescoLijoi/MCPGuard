@@ -53,7 +53,10 @@ def render_markdown(report: ProtocolReport) -> str:
         f"# MCPGuard Report — {status}",
         "",
         f"**Target:** `{report.target}`",
-        f"**Server:** {report.server_name or 'unknown'} {report.server_version or ''}".rstrip(),
+        (
+            f"**Server:** {report.server_name or 'unknown'} "
+            f"{report.server_version or ''}"
+        ).rstrip(),
         f"**Protocol version:** {report.protocol_version or 'unknown'}",
         "",
         "## Checks",
