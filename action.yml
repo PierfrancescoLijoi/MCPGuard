@@ -41,7 +41,9 @@ runs:
 
     - name: Install MCPGuard
       shell: bash
-      run: pip install --quiet "${{ github.action_path }}"
+      env:
+        MCPGUARD_ACTION_PATH: ${{ github.action_path }}
+      run: pip install --quiet "$MCPGUARD_ACTION_PATH"
 
     - name: Run MCPGuard scan
       id: scan

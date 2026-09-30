@@ -301,6 +301,11 @@ Publishing, and attaches the same artifacts to a GitHub release. Configure the
 `pypi` environment and PyPI Trusted Publisher before creating a `v*` tag. The
 distribution is `mcpguard-ci`; the command and Python package remain `mcpguard`.
 
+The same workflow can be started manually from the GitHub Actions page as a
+safe dry run. Manual runs perform every build and validation step and upload the
+distributions as a workflow artifact, but the publish job is always skipped.
+See [the release guide](docs/RELEASING.md) for the exact account configuration.
+
 For repeatable black-box comparisons with MCP Inspector and MCP-Scan, see
 [the comparison protocol](docs/COMPARISON.md). It records raw machine-readable
 results and intentionally avoids unverified marketing claims.

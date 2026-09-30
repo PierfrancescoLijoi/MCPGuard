@@ -3,19 +3,36 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
+    name: Build and validate distributions
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+      - name: Validate release metadata
+        if: github.event_name == 'workflow_dispatch'
+        run: uv run python scripts/check_release.py
       - name: Validate tag and version
+        if: github.event_name == 'push'
         run: uv run python scripts/check_release.py --tag "${GITHUB_REF_NAME}"
       - name: Install locked dependencies
         run: uv sync --frozen --group dev
@@ -34,16 +51,26 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+      - name: Summarize dry run
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "## Release dry run passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "The distributions were built and validated but were not published." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
+    name: Publish trusted release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/project/mcpguard-ci/
     permissions:
+      # Create the GitHub release and attach its distributions.
       contents: write
+      # Exchange GitHub's OIDC identity for a short-lived PyPI credential.
       id-token: write
+      # Record provenance for the uploaded wheel and source distribution.
       attestations: write
     steps:
       - uses: actions/download-artifact@v4
