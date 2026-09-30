@@ -2,28 +2,35 @@
 
 # 🛡️ MCPGuard
 
-### The CI quality gate for legacy MCP servers
+### The CI quality gate for MCP servers
 
 [![CI](https://github.com/PierfrancescoLijoi/MCPGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/PierfrancescoLijoi/MCPGuard/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![MCP](https://img.shields.io/badge/MCP-through%202025--11--25-6C5CE7)](https://modelcontextprotocol.io/)
+[![MCP](https://img.shields.io/badge/MCP-2026--07--28-6C5CE7)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**Validate protocol behavior · inspect tool schemas · measure startup latency**
+**Ship trustworthy MCP servers with protocol validation, security fuzzing, and performance gates**
 
 </div>
 
 ---
 
-MCPGuard launches an MCP server over **stdio**, performs the legacy initialize
-handshake, exercises every advertised list capability, inspects tool definitions
-without invoking them, and returns a deterministic result suitable for CI.
+MCPGuard validates legacy MCP servers over **stdio** and modern `2026-07-28`
+servers over **Streamable HTTP**. It exercises advertised capabilities, inspects
+tool definitions, offers opt-in bounded fuzzing, and measures latency or
+concurrent throughput.
+
+Designed for local development and CI/CD, it turns MCP quality into a repeatable
+release gate: one command can catch protocol regressions, unsafe tool contracts,
+crash-prone input handling, and performance degradation before deployment.
 
 ```mermaid
 flowchart LR
     A[CI / Developer] -->|server command| B[MCPGuard]
-    B --> C[Start stdio server]
-    C --> D[Initialize handshake]
+    B --> C{Target}
+    C -->|command| D[stdio + initialize]
+    C -->|URL| J[Streamable HTTP + server/discover]
+    J --> E
     D --> E{Capabilities}
     E -->|tools| F[tools/list + security rules]
     E -->|resources| G[resources/list]
@@ -76,6 +83,40 @@ mcpguard scan "python my_server.py"
 mcpguard scan "npx -y @modelcontextprotocol/server-everything" --output markdown
 ```
 
+### Scan a modern Streamable HTTP server
+
+```bash
+mcpguard scan "https://example.com/mcp"
+```
+
+HTTP targets use the stateless MCP `2026-07-28` envelope, including the required
+`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` routing headers.
+
+## Opt-in tool fuzzing
+
+```bash
+mcpguard scan "https://example.com/mcp" --fuzz --fuzz-max-calls 25
+```
+
+Fuzz cases are derived from each tool's JSON Schema and bounded globally. The
+fuzzer tests missing fields, minimum/maximum values, short/long strings, unknown
+properties, and basic type boundaries. A clean JSON-RPC rejection is considered
+correct behavior; connection loss, timeout, or an unexpected server failure is
+reported as a failure.
+
+Potentially destructive tools are skipped by default. Run them only against an
+isolated disposable test server and opt in explicitly:
+
+```bash
+mcpguard scan "http://127.0.0.1:8000/mcp" \
+  --fuzz --allow-dangerous-tools
+```
+
+> [!CAUTION]
+> `--allow-dangerous-tools` can execute tools whose names suggest writes,
+> deletion, command execution, or file transfer. Never enable it against a
+> production server or valuable data.
+
 <details>
 <summary><strong>Example JSON report</strong></summary>
 
@@ -118,6 +159,26 @@ samples_ms ──────── every individual measurement
 
 This is a local latency benchmark, not a throughput or load test.
 
+## Load and throughput benchmark
+
+```bash
+mcpguard load-test "https://example.com/mcp" \
+  --requests 500 --concurrency 25
+```
+
+The benchmark sends concurrent stateless `server/discover` requests over a
+reused HTTP connection pool and reports:
+
+| Metric | Meaning |
+|---|---|
+| `completed` / `errors` | Successful and failed requests |
+| `requests_per_second` | Total attempted requests divided by wall time |
+| `p50_ms` | Median request latency |
+| `p95_ms` | 95th-percentile request latency |
+
+Request count and concurrency are bounded CLI integers; concurrency cannot
+exceed the number of requests.
+
 ## GitHub Actions
 
 ```yaml
@@ -153,19 +214,20 @@ exposes `passed` plus `report-path` outputs.
 | Feature | Status |
 |---|---|
 | stdio transport | ✅ Supported |
-| MCP legacy lifecycle through `2025-11-25` | ✅ Supported |
+| Streamable HTTP transport | ✅ Supported for stateless `2026-07-28` endpoints |
+| MCP legacy lifecycle through `2025-11-25` | ✅ Supported over stdio |
+| MCP `2026-07-28` stateless lifecycle | ✅ Supported over Streamable HTTP |
 | JSON and Markdown reports | ✅ Supported |
 | Static tool-definition security checks | ✅ Supported |
 | Startup benchmark | ✅ Supported |
-| Streamable HTTP transport | 🚧 Not yet supported |
-| MCP `2026-07-28` stateless lifecycle | 🚧 Not yet supported |
-| Tool execution fuzzing | 🚧 Not yet supported |
-| Load / throughput benchmarking | 🚧 Not yet supported |
+| Tool execution fuzzing | ✅ Opt-in, bounded, destructive tools blocked by default |
+| Load / throughput benchmarking | ✅ Concurrent HTTP benchmark with p50/p95 |
+| Legacy Streamable HTTP sessions | 🚧 Not yet supported |
+| Authenticated HTTP endpoints | 🚧 Custom auth configuration not yet supported |
 
-MCP `2026-07-28` replaced `initialize` with `server/discover`. The current
-Python dependency used here exposes the legacy lifecycle through `2025-11-25`,
-so MCPGuard reports its actual compatibility instead of claiming modern-era
-coverage.
+MCP `2026-07-28` replaced `initialize` with `server/discover`. MCPGuard uses the
+Python SDK for legacy stdio sessions and a dedicated stateless HTTP client for
+the modern request envelope.
 
 ## Development
 
@@ -183,6 +245,8 @@ mcpguard/
 ├── checker.py    # protocol and capability checks
 ├── security.py   # static tool-definition rules
 ├── benchmark.py  # latency measurements
+├── fuzzer.py     # bounded JSON Schema-derived tool cases
+├── http_transport.py # stateless 2026-07-28 Streamable HTTP
 ├── reporter.py   # JSON and Markdown reports
 ├── transport.py  # stdio session lifecycle
 └── cli.py        # Typer commands and exit codes

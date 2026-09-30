@@ -87,3 +87,19 @@ def test_scan_invalid_output_format() -> None:
     """scan exits with code 2 for unsupported --output values."""
     result = runner.invoke(app, ["scan", "python server.py", "--output", "xml"])
     assert result.exit_code == 2
+
+
+def test_scan_passes_fuzz_options_to_checker() -> None:
+    with patch("mcpguard.cli.check_protocol", new_callable=AsyncMock) as mock_check:
+        mock_check.return_value = _passing_report()
+        result = runner.invoke(
+            app,
+            ["scan", "https://example.test/mcp", "--fuzz", "--fuzz-max-calls", "7"],
+        )
+    assert result.exit_code == 0
+    mock_check.assert_awaited_once_with(
+        "https://example.test/mcp",
+        fuzz=True,
+        fuzz_max_calls=7,
+        allow_dangerous_tools=False,
+    )

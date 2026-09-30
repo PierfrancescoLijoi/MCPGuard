@@ -28,6 +28,11 @@ _SECRET_WORD = re.compile(
 )
 
 
+def is_dangerous_tool_name(name: str) -> bool:
+    """Return whether a tool name suggests side effects or command execution."""
+    return _SENSITIVE_NAME.search(name) is not None
+
+
 def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
     """Inspect tool metadata and input schemas for common security hazards.
 
@@ -40,7 +45,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
         description = str(getattr(tool, "description", "") or "")
         schema = getattr(tool, "inputSchema", None)
 
-        if _SENSITIVE_NAME.search(name):
+        if is_dangerous_tool_name(name):
             findings.append(
                 SecurityFinding(
                     rule="dangerous-tool-name",

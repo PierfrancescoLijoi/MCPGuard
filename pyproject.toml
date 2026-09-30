@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcpguard"
-version = "0.1.0"
-description = "Security scanner, protocol validator, and benchmark suite for MCP servers"
+version = "0.2.0"
+description = "CI-native security, compliance, fuzzing, and performance gate for MCP servers"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.12"
@@ -20,9 +20,10 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
+    "httpx>=0.28",
     "typer>=0.12",
     "pydantic>=2.0",
-    "mcp>=1.0",
+    "mcp>=1.28.1",
 ]
 
 [project.scripts]

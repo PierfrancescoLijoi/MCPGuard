@@ -18,6 +18,7 @@ from mcpguard.checker import (
     KNOWN_PROTOCOL_VERSIONS,
     CheckResult,
     ProtocolReport,
+    check_http_protocol,
     check_protocol,
 )
 
@@ -202,3 +203,82 @@ async def test_check_protocol_connection_failure() -> None:
 
     assert report.passed is False
     assert any(c.name == "server_connection" for c in report.checks)
+
+
+async def test_check_protocol_routes_http_targets_to_http_checker() -> None:
+    expected = ProtocolReport(
+        target="https://example.test/mcp",
+        server_name="modern",
+        server_version="1.0",
+        protocol_version="2026-07-28",
+        checks=[CheckResult(name="server_discover", passed=True, message="ok")],
+    )
+    with patch(
+        "mcpguard.checker.check_http_protocol",
+        new=AsyncMock(return_value=expected),
+    ) as http_check:
+        result = await check_protocol("https://example.test/mcp", fuzz=True)
+    assert result is expected
+    http_check.assert_awaited_once_with(
+        "https://example.test/mcp",
+        fuzz=True,
+        fuzz_max_calls=25,
+        allow_dangerous_tools=False,
+    )
+
+
+async def test_http_checker_exercises_advertised_capabilities() -> None:
+    client = MagicMock()
+    client.discover = AsyncMock(
+        return_value={
+            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+            "_meta": {
+                "io.modelcontextprotocol/serverInfo": {
+                    "name": "modern",
+                    "version": "2.0",
+                }
+            },
+        }
+    )
+    client.list_tools = AsyncMock(
+        return_value=[
+            {
+                "name": "echo",
+                "description": "Echo text",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+        ]
+    )
+    client.request = AsyncMock(return_value={})
+    client.aclose = AsyncMock()
+
+    with patch("mcpguard.checker.ModernHttpClient", return_value=client):
+        report = await check_http_protocol("https://example.test/mcp")
+
+    assert report.passed is True
+    assert report.protocol_version == "2026-07-28"
+    assert {check.name for check in report.checks} >= {
+        "server_discover",
+        "tools_list",
+        "tool_security",
+        "resources_list",
+        "prompts_list",
+    }
+    client.request.assert_any_await("resources/list")
+    client.request.assert_any_await("prompts/list")
+    client.aclose.assert_awaited_once()
+
+
+async def test_http_checker_returns_failed_report_on_connection_error() -> None:
+    client = MagicMock()
+    client.discover = AsyncMock(side_effect=OSError("offline"))
+    client.aclose = AsyncMock()
+    with patch("mcpguard.checker.ModernHttpClient", return_value=client):
+        report = await check_http_protocol("https://example.test/mcp")
+    assert report.passed is False
+    assert report.checks[0].name == "http_connection"
+    client.aclose.assert_awaited_once()
