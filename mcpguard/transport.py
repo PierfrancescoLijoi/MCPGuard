@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
+
+
+def split_command(command: str, *, windows: bool | None = None) -> list[str]:
+    r"""Split a server launch command, keeping backslashes in Windows paths.
+
+    POSIX ``shlex`` treats backslashes as escapes and would turn
+    ``C:\Users\me\server.py`` into ``C:Usersmeserver.py``.
+    """
+    if not (os.name == "nt" if windows is None else windows):
+        return shlex.split(command)
+    quotes = "\"'"
+    return [
+        part[1:-1]
+        if len(part) > 1 and part[0] == part[-1] and part[0] in quotes
+        else part
+        for part in shlex.split(command, posix=False)
+    ]
 
 
 @asynccontextmanager
@@ -23,7 +41,7 @@ async def stdio_session(command: str) -> AsyncGenerator[ClientSession, None]:
     Raises:
         ValueError: If *command* is empty or contains only whitespace.
     """
-    parts = shlex.split(command)
+    parts = split_command(command)
     if not parts:
         raise ValueError("command must not be empty")
 

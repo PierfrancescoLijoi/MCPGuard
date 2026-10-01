@@ -46,3 +46,28 @@ def test_command_parsing(
     parts = shlex.split(command)
     assert parts[0] == expected_exe
     assert parts[1:] == expected_args
+
+
+def test_windows_paths_keep_their_backslashes() -> None:
+    from mcpguard.transport import split_command
+
+    parts = split_command(
+        r'python "C:\Users\me\My Server\server.py" --dir C:\data\x', windows=True
+    )
+
+    assert parts == [
+        "python",
+        r"C:\Users\me\My Server\server.py",
+        "--dir",
+        r"C:\data\x",
+    ]
+
+
+def test_posix_commands_still_honour_shell_quoting() -> None:
+    from mcpguard.transport import split_command
+
+    assert split_command("python 'a b.py' --x", windows=False) == [
+        "python",
+        "a b.py",
+        "--x",
+    ]

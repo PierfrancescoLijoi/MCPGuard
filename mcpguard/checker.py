@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -16,6 +15,7 @@ from mcpguard.baseline import fingerprint_tools
 from mcpguard.fuzzer import fuzz_tools
 from mcpguard.http_transport import MODERN_PROTOCOL_VERSION, ModernHttpClient
 from mcpguard.security import scan_tool_definitions
+from mcpguard.transport import split_command
 
 KNOWN_PROTOCOL_VERSIONS: frozenset[str] = frozenset(
     [*SUPPORTED_PROTOCOL_VERSIONS, MODERN_PROTOCOL_VERSION]
@@ -86,7 +86,7 @@ async def check_protocol(
     if fuzz:
         raise ValueError("tool fuzzing currently requires a Streamable HTTP target")
 
-    parts = shlex.split(target)
+    parts = split_command(target)
     if not parts:
         raise ValueError("target command must not be empty")
 
