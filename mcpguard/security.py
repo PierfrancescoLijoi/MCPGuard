@@ -41,6 +41,18 @@ _INJECTION = re.compile(
 )
 
 
+def tool_input_schema(tool: Any) -> Any:
+    """Return a tool's input schema from wire-style or SDK-style objects.
+
+    mcp 1.x exposes ``inputSchema``; mcp 2.x renamed the attribute to ``input_schema``.
+    """
+    for attribute in ("inputSchema", "input_schema"):
+        schema = getattr(tool, attribute, None)
+        if schema is not None:
+            return schema
+    return None
+
+
 def is_dangerous_tool_name(name: str) -> bool:
     """Return whether a tool name suggests side effects or command execution."""
     canonical = re.sub(r"[^a-z0-9]", "", name.lower())
@@ -57,7 +69,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
     for tool in tools:
         name = str(getattr(tool, "name", "") or "")
         description = str(getattr(tool, "description", "") or "")
-        schema = getattr(tool, "inputSchema", None)
+        schema = tool_input_schema(tool)
 
         if is_dangerous_tool_name(name):
             findings.append(

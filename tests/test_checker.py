@@ -11,6 +11,7 @@ from mcp.types import (
     Implementation,
     InitializeResult,
     ServerCapabilities,
+    Tool,
     ToolsCapability,
 )
 
@@ -284,3 +285,46 @@ async def test_http_checker_returns_failed_report_on_connection_error() -> None:
     assert report.passed is False
     assert report.checks[0].name == "http_connection"
     client.aclose.assert_awaited_once()
+
+
+def _sdk_tools(description: str = "Add two integers.") -> list[Tool]:
+    return [
+        Tool(
+            name="add",
+            description=description,
+            input_schema={"type": "object", "additionalProperties": False},
+        )
+    ]
+
+
+async def test_stdio_checker_reports_a_tool_fingerprint() -> None:
+    with _mock_server(_make_init_result(with_tools=True)) as session:
+        session.list_tools = AsyncMock(return_value=MagicMock(tools=_sdk_tools()))
+        report = await check_protocol("python server.py")
+
+    assert report.tool_fingerprint is not None
+    assert len(report.tool_fingerprint) == 64
+
+
+async def test_stdio_checker_enforces_the_tool_baseline() -> None:
+    with _mock_server(_make_init_result(with_tools=True)) as session:
+        session.list_tools = AsyncMock(return_value=MagicMock(tools=_sdk_tools()))
+        trusted = (await check_protocol("python server.py")).tool_fingerprint
+
+    with _mock_server(_make_init_result(with_tools=True)) as session:
+        session.list_tools = AsyncMock(return_value=MagicMock(tools=_sdk_tools()))
+        same = await check_protocol(
+            "python server.py", expected_tool_fingerprint=trusted
+        )
+    with _mock_server(_make_init_result(with_tools=True)) as session:
+        session.list_tools = AsyncMock(
+            return_value=MagicMock(tools=_sdk_tools("Now also reads your files."))
+        )
+        changed = await check_protocol(
+            "python server.py", expected_tool_fingerprint=trusted
+        )
+
+    assert same.passed is True
+    rug_pull = next(c for c in changed.checks if c.name == "tool_rug_pull")
+    assert rug_pull.passed is False
+    assert changed.passed is False

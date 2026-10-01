@@ -39,7 +39,7 @@ flowchart LR
     E -->|tools| F[tools/list + security rules]
     E -->|resources| G[resources/list]
     E -->|prompts| H[prompts/list]
-    F --> I[JSON or Markdown report]
+    F --> I[JSON, Markdown or SARIF report]
     G --> I
     H --> I
     I -->|exit 0 / 1| A
@@ -209,7 +209,8 @@ mcpguard load-test "$MCP_URL" --baseline performance.json \
 ## Tool rug-pull detection
 
 Create a deterministic SHA-256 fingerprint of the complete advertised tool
-catalog, then compare future scans against it:
+catalog, then compare future scans against it. This works for stdio commands
+and HTTP endpoints; keep one baseline per transport:
 
 ```bash
 mcpguard scan "$MCP_URL" --write-tool-baseline tools.json

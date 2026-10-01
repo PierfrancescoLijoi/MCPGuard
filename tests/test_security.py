@@ -64,3 +64,26 @@ def test_prompt_injection_maps_to_owasp_mcp03() -> None:
         ]
     )
     assert any(f.owasp_id == "MCP03" for f in findings)
+
+
+def test_sdk_tool_object_is_inspected_not_reported_as_missing_schema() -> None:
+    from mcp.types import Tool
+
+    tool = Tool(
+        name="add",
+        description="Add two integers.",
+        input_schema={
+            "type": "object",
+            "properties": {"a": {"type": "integer"}},
+            "additionalProperties": False,
+        },
+    )
+    assert scan_tool_definitions([tool]) == []
+
+
+def test_sdk_tool_object_with_open_schema_still_warns() -> None:
+    from mcp.types import Tool
+
+    tool = Tool(name="add", input_schema={"type": "object"})
+    rules = {f.rule for f in scan_tool_definitions([tool])}
+    assert rules == {"unbounded-input"}

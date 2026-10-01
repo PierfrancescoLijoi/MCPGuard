@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mcpguard.http_transport import McpProtocolError
-from mcpguard.security import is_dangerous_tool_name
+from mcpguard.security import is_dangerous_tool_name, tool_input_schema
 
 ToolInvoker = Callable[[str, dict[str, Any]], Awaitable[Any]]
 
@@ -95,7 +95,7 @@ async def fuzz_tools(
         if is_dangerous_tool_name(name) and not allow_dangerous:
             report.skipped.append(name)
             continue
-        schema = getattr(tool, "inputSchema", {})
+        schema = tool_input_schema(tool)
         cases = generate_cases(schema if isinstance(schema, Mapping) else {})
         for arguments in cases:
             if report.calls >= max_calls:

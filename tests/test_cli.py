@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import io
 import json
+import sys
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
+from mcpguard import cli
 from mcpguard.checker import CheckResult, ProtocolReport
 from mcpguard.cli import app
 
@@ -105,3 +109,15 @@ def test_scan_passes_fuzz_options_to_checker() -> None:
         headers=None,
         expected_tool_fingerprint=None,
     )
+
+
+def test_markdown_report_survives_a_legacy_windows_console(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = io.BytesIO()
+    console = io.TextIOWrapper(raw, encoding="cp1252", write_through=True)
+    monkeypatch.setattr(sys, "stdout", console)
+
+    cli._emit("✅ passed")
+
+    assert raw.getvalue().decode("utf-8") == "✅ passed\n"

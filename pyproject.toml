@@ -23,7 +23,7 @@ dependencies = [
     "httpx>=0.28",
     "typer>=0.12",
     "pydantic>=2.0",
-    "mcp>=1.28.1",
+    "mcp>=2.0.0",
 ]
 
 [project.scripts]

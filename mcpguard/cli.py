@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Annotated, cast
 
@@ -21,6 +22,16 @@ app = typer.Typer(
     help="Security scanner, protocol validator, and benchmark suite for MCP servers.",
     no_args_is_help=True,
 )
+
+
+def _emit(text: str) -> None:
+    """Print a report, falling back to UTF-8 bytes on a legacy console encoding."""
+    try:
+        typer.echo(text)
+    except UnicodeEncodeError:
+        sys.stdout.flush()
+        sys.stdout.buffer.write((text + "\n").encode("utf-8"))
+        sys.stdout.flush()
 
 
 def _auth_headers(values: list[str], bearer_token_env: str | None) -> dict[str, str]:
@@ -121,7 +132,7 @@ def scan(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
 
-    typer.echo(render(report, fmt=fmt))
+    _emit(render(report, fmt=fmt))
 
     if not report.passed:
         raise typer.Exit(code=1)

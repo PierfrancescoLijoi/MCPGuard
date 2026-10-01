@@ -92,6 +92,7 @@ async def check_protocol(
 
     params = StdioServerParameters(command=parts[0], args=parts[1:])
     checks: list[CheckResult] = []
+    tool_fingerprint: str | None = None
 
     try:
         async with (
@@ -197,6 +198,18 @@ async def check_protocol(
                             message="tools/list responded successfully",
                         )
                     )
+                    tool_fingerprint = fingerprint_tools(
+                        [
+                            tool.model_dump(
+                                mode="json", by_alias=True, exclude_none=True
+                            )
+                            for tool in tools_result.tools
+                        ]
+                    )
+                    if expected_tool_fingerprint is not None:
+                        checks.append(
+                            _rug_pull_check(tool_fingerprint, expected_tool_fingerprint)
+                        )
                     findings = scan_tool_definitions(tools_result.tools)
                     checks.append(
                         CheckResult(
@@ -275,6 +288,7 @@ async def check_protocol(
                 server_version=server_info.version if server_info else None,
                 protocol_version=protocol_version,
                 checks=checks,
+                tool_fingerprint=tool_fingerprint,
             )
 
     except Exception as exc:
@@ -292,6 +306,19 @@ async def check_protocol(
             protocol_version=None,
             checks=checks,
         )
+
+
+def _rug_pull_check(fingerprint: str, expected: str) -> CheckResult:
+    matches = fingerprint == expected
+    return CheckResult(
+        "tool_rug_pull",
+        matches,
+        (
+            "Tool catalog matches the trusted baseline"
+            if matches
+            else "Tool catalog changed from the trusted baseline"
+        ),
+    )
 
 
 def _tool_object(tool: dict[str, Any]) -> SimpleNamespace:
@@ -365,15 +392,7 @@ async def check_http_protocol(
             )
             if expected_tool_fingerprint is not None:
                 checks.append(
-                    CheckResult(
-                        "tool_rug_pull",
-                        tool_fingerprint == expected_tool_fingerprint,
-                        (
-                            "Tool catalog matches the trusted baseline"
-                            if tool_fingerprint == expected_tool_fingerprint
-                            else "Tool catalog changed from the trusted baseline"
-                        ),
-                    )
+                    _rug_pull_check(tool_fingerprint, expected_tool_fingerprint)
                 )
             findings = scan_tool_definitions(tools)
             checks.append(
