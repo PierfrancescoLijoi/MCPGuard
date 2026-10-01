@@ -12,7 +12,7 @@
 **MCPGuard turns the quality of an MCP server into a CI gate.** One command starts the server (or calls its HTTP endpoint), checks that it speaks the protocol correctly, reads every tool definition for security problems, fingerprints the tool catalog so a silent change fails the build, and can fuzz the tools with bounded inputs. Reports come as JSON, Markdown or SARIF, and the exit code is the verdict.
 
 ```bash
-pip install mcpguard-ci            # after the first PyPI release; for now clone the repo and run: pip install .
+pip install git+https://github.com/PierfrancescoLijoi/MCPGuard.git
 mcpguard scan "npx -y @modelcontextprotocol/server-everything" --output markdown
 ```
 
@@ -196,7 +196,7 @@ jobs:
       security-events: write   # only for output: sarif
     steps:
       - uses: actions/checkout@v7
-      - uses: PierfrancescoLijoi/MCPGuard@v0.3.0
+      - uses: PierfrancescoLijoi/MCPGuard@main   # pin to a release tag once one is published
         with:
           target: "python my_server.py"
           output: markdown
