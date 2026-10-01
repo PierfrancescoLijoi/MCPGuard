@@ -1,10 +1,14 @@
 name: MCP Server Compliance
 
+# Manual example of the MCPGuard action. It runs the action from this checkout
+# against a server command you provide, so it never fails on ordinary pushes.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "MCP server command or Streamable HTTP URL to scan"
+        required: true
+        default: "npx -y @modelcontextprotocol/server-everything"
 
 jobs:
   mcpguard:
@@ -15,8 +19,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Scan MCP server
-        uses: PierfrancescoLijoi/MCPGuard@v0.1.0
+        uses: ./
         with:
-          target: "python my_mcp_server.py"
-          output: json
+          target: ${{ inputs.target }}
+          output: markdown
           fail-on-error: "true"
