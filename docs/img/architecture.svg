@@ -12,7 +12,7 @@
 <rect x="520" y="124" width="276" height="272" rx="12" fill="#161b22" stroke="#a78bfa" stroke-width="1.5"/>
 <text x="538" y="150" font-size="14" class="b">checker.py orchestrates</text>
 <text x="538" y="178" font-size="12" class="b" style="fill:#a78bfa">Protocol</text><text x="610" y="178" font-size="12" class="d">handshake, version, identity,</text><text x="610" y="194" font-size="12" class="d">tools, resources, prompts lists</text>
-<text x="538" y="222" font-size="12" class="b" style="fill:#a78bfa">Security</text><text x="610" y="222" font-size="12" class="d">security.py: secrets, injection,</text><text x="610" y="238" font-size="12" class="d">dangerous names, schema rules</text>
+<text x="538" y="222" font-size="12" class="b" style="fill:#a78bfa">Security</text><text x="610" y="222" font-size="12" class="d">security.py, poisoning.py: secrets,</text><text x="610" y="238" font-size="12" class="d">injection, tool orders, schemas</text>
 <text x="538" y="266" font-size="12" class="b" style="fill:#a78bfa">Rug-pull</text><text x="610" y="266" font-size="12" class="d">baseline.py: SHA-256 of the</text><text x="610" y="282" font-size="12" class="d">whole tool catalog</text>
 <text x="538" y="310" font-size="12" class="b" style="fill:#a78bfa">Fuzzing</text><text x="610" y="310" font-size="12" class="d">fuzzer.py: bounded cases from</text><text x="610" y="326" font-size="12" class="d">each JSON Schema, HTTP only</text>
 <text x="538" y="354" font-size="12" class="b" style="fill:#a78bfa">Speed</text><text x="610" y="354" font-size="12" class="d">benchmark.py: startup latency,</text><text x="610" y="370" font-size="12" class="d">p50 and p95 under load</text>

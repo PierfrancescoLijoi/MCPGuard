@@ -4,14 +4,11 @@
       {
         "category": "Prompt injection in the description",
         "cases": 12,
-        "detected": 7,
-        "recall": 0.583,
+        "detected": 10,
+        "recall": 0.833,
         "missed": [
-          "t7",
-          "t8",
           "t9",
-          "t10",
-          "t11"
+          "t10"
         ]
       },
       {
@@ -43,14 +40,14 @@
         "missed": []
       }
     ],
-    "overall_recall": 0.737,
+    "overall_recall": 0.816,
     "benign_cases": 20,
     "benign_flagged_as_error": [
       "reset_password",
       "rotate_api_key"
     ],
     "false_positive_rate": 0.1,
-    "precision": 0.933
+    "precision": 0.939
   },
   "rug_pull": {
     "mutations": 6,

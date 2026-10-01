@@ -1,0 +1,110 @@
+{
+  "poisoned": {
+    "dev": {
+      "cases": 285,
+      "blocked": 257,
+      "blocked_rate": 0.902,
+      "flagged": 283,
+      "flagged_rate": 0.993
+    },
+    "all": {
+      "cases": 485,
+      "blocked": 423,
+      "blocked_rate": 0.872,
+      "flagged": 471,
+      "flagged_rate": 0.971
+    },
+    "held_out": {
+      "cases": 200,
+      "blocked": 166,
+      "blocked_rate": 0.83,
+      "flagged": 188,
+      "flagged_rate": 0.94
+    },
+    "held_out_by_risk": {
+      "Code Injection": {
+        "cases": 10,
+        "blocked": 6,
+        "blocked_rate": 0.6,
+        "flagged": 7,
+        "flagged_rate": 0.7
+      },
+      "Credential Leakage": {
+        "cases": 8,
+        "blocked": 8,
+        "blocked_rate": 1.0,
+        "flagged": 8,
+        "flagged_rate": 1.0
+      },
+      "Data Tampering": {
+        "cases": 18,
+        "blocked": 15,
+        "blocked_rate": 0.833,
+        "flagged": 16,
+        "flagged_rate": 0.889
+      },
+      "Financial Loss": {
+        "cases": 8,
+        "blocked": 7,
+        "blocked_rate": 0.875,
+        "flagged": 8,
+        "flagged_rate": 1.0
+      },
+      "Information Manipulation": {
+        "cases": 47,
+        "blocked": 42,
+        "blocked_rate": 0.894,
+        "flagged": 45,
+        "flagged_rate": 0.957
+      },
+      "Infrastructure Damage": {
+        "cases": 23,
+        "blocked": 14,
+        "blocked_rate": 0.609,
+        "flagged": 23,
+        "flagged_rate": 1.0
+      },
+      "Instruction Tampering": {
+        "cases": 11,
+        "blocked": 10,
+        "blocked_rate": 0.909,
+        "flagged": 11,
+        "flagged_rate": 1.0
+      },
+      "Message Hijacking": {
+        "cases": 5,
+        "blocked": 4,
+        "blocked_rate": 0.8,
+        "flagged": 4,
+        "flagged_rate": 0.8
+      },
+      "Privacy Leakage": {
+        "cases": 37,
+        "blocked": 31,
+        "blocked_rate": 0.838,
+        "flagged": 33,
+        "flagged_rate": 0.892
+      },
+      "Service Disruption": {
+        "cases": 33,
+        "blocked": 29,
+        "blocked_rate": 0.879,
+        "flagged": 33,
+        "flagged_rate": 1.0
+      }
+    }
+  },
+  "benign": {
+    "tools": 210,
+    "servers": 18,
+    "flagged_as_error": [
+      "firecrawl/firecrawl_scrape",
+      "firecrawl/firecrawl_credit_usage",
+      "chrome-devtools/fill_form"
+    ],
+    "error_rate": 0.014,
+    "flagged_as_warning": [
+      "context7/query-docs"
+    ]
+  }
+}

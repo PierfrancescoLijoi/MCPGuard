@@ -5,9 +5,9 @@ the claim. It does not claim full OWASP MCP Top 10 certification.
 
 | OWASP risk | Coverage | Evidence |
 |---|---|---|
-| MCP01 Secret exposure | Partial | Secret indicators in tool descriptions |
+| MCP01 Secret exposure | Partial | Secret indicators, key-file paths and fixed exfiltration addresses in tool descriptions |
 | MCP02 Scope creep | Partial | Destructive capabilities and unbounded schemas |
-| MCP03 Tool poisoning | Direct | Injection indicators and malformed tool metadata |
+| MCP03 Tool poisoning | Direct, for explicit attacks | Cross-tool orders, priority claims, forced arguments, injection indicators, malformed metadata; 83.0% of 200 held-out MCPTox cases blocked |
 | MCP04 Supply chain | Partial | Locked dependencies, audit, release provenance |
 | MCP05 Command execution | Partial | Dangerous tool-name detection and guarded fuzzing |
 | MCP06 Intent subversion | Partial | Description injection indicators |

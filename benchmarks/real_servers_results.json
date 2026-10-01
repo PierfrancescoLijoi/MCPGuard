@@ -14,7 +14,7 @@
     "protocol_version": "2025-11-25",
     "exit_code": 0,
     "passed": true,
-    "seconds": 3.0,
+    "seconds": 2.8,
     "errors": [],
     "dangerous_names": [
       "delete_entities",
@@ -28,7 +28,7 @@
     "protocol_version": "2025-11-25",
     "exit_code": 0,
     "passed": true,
-    "seconds": 2.8,
+    "seconds": 3.3,
     "errors": [],
     "dangerous_names": [],
     "unbounded_schemas": 1
@@ -38,7 +38,7 @@
     "protocol_version": "2025-11-25",
     "exit_code": 0,
     "passed": true,
-    "seconds": 2.8,
+    "seconds": 2.6,
     "errors": [],
     "dangerous_names": [
       "write_file"
