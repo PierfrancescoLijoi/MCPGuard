@@ -7,6 +7,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from mcpguard.poisoning import normalize, scan_description
+
 
 @dataclass(frozen=True)
 class SecurityFinding:
@@ -41,6 +43,9 @@ _INJECTION = re.compile(
 )
 
 
+_POISONING_OWASP = {"sensitive-path": "MCP01", "exfiltration-target": "MCP01"}
+
+
 def tool_input_schema(tool: Any) -> Any:
     """Return a tool's input schema from wire-style or SDK-style objects.
 
@@ -68,7 +73,7 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
     findings: list[SecurityFinding] = []
     for tool in tools:
         name = str(getattr(tool, "name", "") or "")
-        description = str(getattr(tool, "description", "") or "")
+        description = normalize(str(getattr(tool, "description", "") or ""))
         schema = tool_input_schema(tool)
 
         if is_dangerous_tool_name(name):
@@ -104,6 +109,17 @@ def scan_tool_definitions(tools: Iterable[Any]) -> list[SecurityFinding]:
                     tool=name,
                     message="Tool description contains prompt-injection indicators",
                     owasp_id="MCP03",
+                )
+            )
+
+        for signal in scan_description(name, description):
+            findings.append(
+                SecurityFinding(
+                    rule=signal.rule,
+                    severity=signal.severity,
+                    tool=name,
+                    message=signal.message,
+                    owasp_id=_POISONING_OWASP.get(signal.rule, "MCP03"),
                 )
             )
 
