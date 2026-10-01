@@ -1,240 +1,170 @@
 <div align="center">
 
-# 🛡️ MCPGuard
-
-### The CI quality gate for MCP servers
+<img src="docs/img/hero.svg" alt="MCPGuard results: 93.3% precision, 73.7% recall on a hard corpus, 6 of 6 catalog changes caught, 4 of 4 real servers scanned" width="100%"/>
 
 [![CI](https://github.com/PierfrancescoLijoi/MCPGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/PierfrancescoLijoi/MCPGuard/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-2026--07--28-6C5CE7)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**Ship trustworthy MCP servers with protocol validation, security fuzzing, and performance gates**
-
 </div>
 
----
+**MCPGuard turns the quality of an MCP server into a CI gate.** One command starts the server (or calls its HTTP endpoint), checks that it speaks the protocol correctly, reads every tool definition for security problems, fingerprints the tool catalog so a silent change fails the build, and can fuzz the tools with bounded inputs. Reports come as JSON, Markdown or SARIF, and the exit code is the verdict.
 
-MCPGuard validates legacy MCP servers over **stdio** and modern `2026-07-28`
-servers over **Streamable HTTP**. It exercises advertised capabilities, inspects
-tool definitions, offers opt-in bounded fuzzing, and measures latency or
-concurrent throughput.
+```bash
+pip install mcpguard-ci            # after the first PyPI release; for now clone the repo and run: pip install .
+mcpguard scan "npx -y @modelcontextprotocol/server-everything" --output markdown
+```
 
-Designed for local development and CI/CD, it turns MCP quality into a repeatable
-release gate: one command can catch protocol regressions, unsafe tool contracts,
-crash-prone input handling, and performance degradation before deployment.
+## Results
 
-Reports are available as JSON, Markdown, or **SARIF 2.1.0** for GitHub code
-scanning. Findings carry OWASP MCP identifiers where MCPGuard has direct or
-partial evidence; see [the honest coverage matrix](docs/SECURITY_COVERAGE.md).
+Everything below is measured by scripts in this repository and can be re-run. The numbers are deliberately not flattering: the test corpus includes attacks the rules do not catch and harmless tools that look risky.
+
+### Detection on a labeled corpus
+
+`benchmarks/detection.py` runs the static rules over **38 malicious and 20 benign tool definitions**. A malicious case counts as detected when the scanner raises the finding the category calls for.
+
+| Category | Detected | Recall | Missed |
+|---|---:|---:|---|
+| Prompt injection in the description | 7/12 | 58% | file-read exfiltration, silent `.env` leak, "prior directions", "do not mention", zero-width obfuscation |
+| Secret material in the description | 6/8 | 75% | `client_secret`, "bearer token" |
+| Dangerous capability in the tool name | 9/12 | 75% | `kill_process`, `eval_expression`, `system_call` |
+| Broken input schema | 6/6 | 100% | none |
+
+**Overall recall 73.7% (28 of 38). Precision 93.3%.** Two of the 20 benign tools are flagged as errors, `reset_password` and `rotate_api_key`, because their descriptions legitimately mention secrets. Every miss is listed in [`benchmarks/detection_results.json`](benchmarks/detection_results.json). The rules match explicit patterns, so a rephrased attack gets through: treat MCPGuard as a fast first filter next to source review, not as a replacement for it.
+
+### Rug-pull detection
+
+The tool catalog is hashed with SHA-256 over a canonical form. Six kinds of change were tried against a baseline: a rewritten description, a renamed tool, a new schema property, a flipped annotation, an added tool and a removed tool. **All 6 change the fingerprint and fail the gate.** Reordering the tools does not, by design.
+
+### Real servers
+
+`benchmarks/real_servers.py` scans four published servers with the installed command, on a laptop:
+
+| Server | Passed | Scan time | Flagged by name |
+|---|:-:|---:|---|
+| `server-everything` | yes | 3.5 s | none |
+| `server-memory` | yes | 3.0 s | `delete_entities`, `delete_observations`, `delete_relations` |
+| `server-sequential-thinking` | yes | 2.8 s | none |
+| `server-filesystem` | yes | 2.8 s | `write_file` |
+
+No error-level findings on any of them, and the name-based warnings point at tools that really do delete or write. All four servers also trigger the open-schema warning (1 to 14 tools each): it is noise you can accept, but it is reported because a schema that allows undeclared properties widens the attack surface.
+
+### Engineering
+
+74 automated tests at 82% coverage (the CI gate is 80%), `mypy --strict`, `ruff`, a locked dependency file, and a release pipeline that builds the wheel, installs it in a clean environment and scans a real server before anything is published.
+
+## How it works
 
 ```mermaid
 flowchart LR
-    A[CI / Developer] -->|server command| B[MCPGuard]
-    B --> C{Target}
-    C -->|command| D[stdio + initialize]
-    C -->|URL| J[Streamable HTTP + server/discover]
-    J --> E
-    D --> E{Capabilities}
-    E -->|tools| F[tools/list + security rules]
-    E -->|resources| G[resources/list]
-    E -->|prompts| H[prompts/list]
-    F --> I[JSON, Markdown or SARIF report]
-    G --> I
-    H --> I
-    I -->|exit 0 / 1| A
+    A[Developer or CI] -->|server command or URL| B[mcpguard scan]
+    B --> C{Transport}
+    C -->|command| D[stdio session]
+    C -->|URL| E[stateless HTTP]
+    D --> F[Protocol checks]
+    E --> F
+    F --> G[Static security rules]
+    G --> H[Tool catalog fingerprint]
+    H --> I[Optional fuzzing, HTTP only]
+    I --> J[JSON, Markdown or SARIF]
+    J -->|exit 0, 1 or 2| A
 ```
+
+1. **Connect.** A command is launched over stdio with the official Python SDK. A URL is called with a dedicated stateless client for the `2026-07-28` revision, including the required `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers.
+2. **Check the protocol.** The handshake completes, the revision is one the SDK knows, `serverInfo` has a name, and every advertised capability (tools, resources, prompts) answers its `list` call.
+3. **Read the tool definitions.** Descriptions are searched for secret material and injection phrasing, names for command execution and destructive access, and schemas for missing or malformed definitions and open `additionalProperties`. No tool is called.
+4. **Fingerprint the catalog.** Names, descriptions, annotations and schemas hash to one value. Compare it with a trusted baseline and any change fails the scan.
+5. **Fuzz, only if asked.** `--fuzz` derives bounded cases from each tool's JSON Schema. A clean rejection is correct behavior; a lost connection, a timeout or an unexpected failure is reported. Tools that look destructive are skipped unless you pass `--allow-dangerous-tools`.
+6. **Report and gate.** The same findings render as JSON, Markdown or SARIF 2.1.0 with OWASP MCP identifiers where there is direct or partial evidence, and the process exits 0, 1 or 2.
+
+## Architecture
+
+<img src="docs/img/architecture.svg" alt="Architecture: target, transport, checks, report, gate" width="100%"/>
+
+| Module | Role |
+|---|---|
+| `cli.py` | Typer commands `scan`, `benchmark` and `load-test`; owns the exit codes |
+| `transport.py` | stdio session through the MCP SDK; command splitting that keeps Windows paths intact |
+| `http_transport.py` | Stateless `2026-07-28` Streamable HTTP client with header handling and authentication |
+| `checker.py` | Runs the protocol checks on either transport and assembles the report |
+| `security.py` | Static rules over tool declarations, accepting both SDK-style and wire-style tools |
+| `baseline.py` | Tool catalog fingerprint and the p95 regression gate |
+| `fuzzer.py` | Schema-derived bounded cases with guardrails for dangerous tools |
+| `benchmark.py` | Startup latency and concurrent throughput with p50 and p95 |
+| `reporter.py` | JSON, Markdown and SARIF renderers |
 
 ## What it checks
 
 | Area | Check | Gate behavior |
 |---|---|---|
-| Lifecycle | Server starts and completes `initialize` | Fails |
-| Version | Negotiated revision is supported by the installed Python SDK | Fails |
+| Lifecycle | Server starts and completes `initialize` (or `server/discover` over HTTP) | Fails |
+| Version | Negotiated revision is known to the installed SDK | Fails |
 | Identity | `serverInfo` exists and has a non-empty name | Fails |
-| Tools | Advertised `tools/list` responds | Fails |
-| Resources | Advertised `resources/list` responds | Fails |
-| Prompts | Advertised `prompts/list` responds | Fails |
+| Capabilities | `tools/list`, `resources/list` and `prompts/list` respond when advertised | Fails |
 | Security | Tool schema is a JSON object | Fails |
-| Security | Description appears to expose secret material | Fails |
+| Security | Description appears to expose secret material or contains injection phrasing | Fails |
 | Security | Schema accepts undeclared properties | Warns |
 | Security | Tool name suggests command execution or destructive access | Warns |
+| Rug-pull | Tool catalog differs from the trusted baseline | Fails |
+| Fuzzing | Connection loss, timeout or unexpected failure on a derived input | Fails |
 
 > [!IMPORTANT]
-> Security analysis is declaration-only. MCPGuard never invokes a server tool,
-> so it cannot prove that tool implementations are safe. Findings are CI
-> heuristics, not a substitute for source review, sandboxing, and runtime policy.
+> Security analysis is declaration-only. MCPGuard cannot prove that a tool implementation is safe. See the [coverage matrix](docs/SECURITY_COVERAGE.md) for what is and is not assessed against the OWASP MCP list.
 
-## Quick start
-
-### Install from the repository
+## Usage
 
 ```bash
-git clone https://github.com/PierfrancescoLijoi/MCPGuard.git
-cd MCPGuard
-pip install .
+mcpguard scan "python my_server.py"                       # stdio server, JSON report
+mcpguard scan "https://example.com/mcp" -o markdown       # modern HTTP server
+mcpguard scan "https://example.com/mcp" -o sarif > mcpguard.sarif
 ```
 
-After the first PyPI release, install the published distribution from anywhere
-with `pip install mcpguard-ci`. The executable and Python import remain
-`mcpguard`.
-
-### Scan a Python server
-
-```bash
-mcpguard scan "python my_server.py"
-```
-
-### Scan an npm server and render Markdown
-
-```bash
-mcpguard scan "npx -y @modelcontextprotocol/server-everything" --output markdown
-```
-
-### Scan a modern Streamable HTTP server
-
-```bash
-mcpguard scan "https://example.com/mcp"
-```
-
-HTTP targets use the stateless MCP `2026-07-28` envelope, including the required
-`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` routing headers.
-
-Authenticated endpoints can read bearer tokens from the environment without
-putting credentials in source files or CLI history:
+**Authentication.** Read a bearer token from the environment, and repeat `--header "X-Tenant: acme"` for more headers (HTTP targets only). Reserved MCP transport headers cannot be overridden.
 
 ```bash
 export MCP_TOKEN="..."
 mcpguard scan "https://example.com/mcp" --bearer-token-env MCP_TOKEN
 ```
 
-Additional headers may be repeated with `--header "X-Tenant: acme"`. Reserved
-MCP transport headers cannot be overridden.
+**Rug-pull baseline.** Works for stdio commands and HTTP endpoints; keep one baseline per transport.
 
-## Opt-in tool fuzzing
+```bash
+mcpguard scan "$TARGET" --write-tool-baseline tools.json     # trust the current catalog
+mcpguard scan "$TARGET" --tool-baseline tools.json           # fail if it changed
+```
+
+**Fuzzing.** HTTP targets only, bounded globally.
 
 ```bash
 mcpguard scan "https://example.com/mcp" --fuzz --fuzz-max-calls 25
 ```
 
-Fuzz cases are derived from each tool's JSON Schema and bounded globally. The
-fuzzer tests missing fields, minimum/maximum values, short/long strings, unknown
-properties, and basic type boundaries. A clean JSON-RPC rejection is considered
-correct behavior; connection loss, timeout, or an unexpected server failure is
-reported as a failure.
-
-Potentially destructive tools are skipped by default. Run them only against an
-isolated disposable test server and opt in explicitly:
-
-```bash
-mcpguard scan "http://127.0.0.1:8000/mcp" \
-  --fuzz --allow-dangerous-tools
-```
-
 > [!CAUTION]
-> `--allow-dangerous-tools` can execute tools whose names suggest writes,
-> deletion, command execution, or file transfer. Never enable it against a
-> production server or valuable data.
+> `--allow-dangerous-tools` runs tools whose names suggest writes, deletion, command execution or file transfer. Use it only against an isolated, disposable test server.
 
-<details>
-<summary><strong>Example JSON report</strong></summary>
-
-```json
-{
-  "target": "python my_server.py",
-  "passed": true,
-  "server": {
-    "name": "example-server",
-    "version": "1.0.0"
-  },
-  "protocol_version": "2025-11-25",
-  "checks": [
-    {
-      "name": "initialize_handshake",
-      "passed": true,
-      "message": "Initialize handshake completed successfully"
-    }
-  ]
-}
-```
-
-</details>
-
-## Benchmark startup
+**Speed.**
 
 ```bash
-mcpguard benchmark "python my_server.py" --iterations 10
+mcpguard benchmark "python my_server.py" --iterations 10        # startup + initialize latency
+mcpguard load-test "$MCP_URL" --requests 500 --concurrency 25   # p50, p95, requests per second
+mcpguard load-test "$MCP_URL" --save-baseline perf.json
+mcpguard load-test "$MCP_URL" --baseline perf.json --max-regression-percent 10
 ```
 
-Each iteration starts a clean process and measures the full connection plus
-initialize handshake. The output contains the raw samples and aggregate values:
+Load-test numbers describe the server under test, not MCPGuard, so they are not part of the results above.
 
-```text
-minimum_ms ─────┐
-average_ms ─────┼── startup and initialize latency
-maximum_ms ─────┘
-samples_ms ──────── every individual measurement
-```
-
-This is a local latency benchmark, not a throughput or load test.
-
-## Load and throughput benchmark
-
-```bash
-mcpguard load-test "https://example.com/mcp" \
-  --requests 500 --concurrency 25
-```
-
-The benchmark sends concurrent stateless `server/discover` requests over a
-reused HTTP connection pool and reports:
-
-| Metric | Meaning |
-|---|---|
-| `completed` / `errors` | Successful and failed requests |
-| `requests_per_second` | Total attempted requests divided by wall time |
-| `p50_ms` | Median request latency |
-| `p95_ms` | 95th-percentile request latency |
-
-Request count and concurrency are bounded CLI integers; concurrency cannot
-exceed the number of requests.
-
-Save a baseline and fail CI when p95 latency regresses beyond a threshold:
-
-```bash
-mcpguard load-test "$MCP_URL" --save-baseline performance.json
-mcpguard load-test "$MCP_URL" --baseline performance.json \
-  --max-regression-percent 10
-```
-
-## Tool rug-pull detection
-
-Create a deterministic SHA-256 fingerprint of the complete advertised tool
-catalog, then compare future scans against it. This works for stdio commands
-and HTTP endpoints; keep one baseline per transport:
-
-```bash
-mcpguard scan "$MCP_URL" --write-tool-baseline tools.json
-mcpguard scan "$MCP_URL" --tool-baseline tools.json
-```
-
-Changes to names, descriptions, annotations, or schemas fail the gate and force
-an explicit review of the new catalog.
-
-## GitHub Actions
+**GitHub Actions.**
 
 ```yaml
-name: MCP compliance
-
-on: [push, pull_request]
-
 jobs:
   mcpguard:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write   # only for output: sarif
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: PierfrancescoLijoi/MCPGuard@v0.3.0
         with:
           target: "python my_server.py"
@@ -242,89 +172,28 @@ jobs:
           fail-on-error: "true"
 ```
 
-The action uploads the generated report as the `mcpguard-report` artifact and
-exposes `passed` plus `report-path` outputs.
+The action uploads the report as the `mcpguard-report` artifact and exposes `passed` and `report-path`. GitHub does not grant `security-events: write` to pull requests from forks, so use JSON or Markdown for untrusted forks.
 
-`security-events: write` is required only when `output: sarif` enables the
-CodeQL upload step. GitHub does not grant that permission to pull requests from
-forks, so use JSON or Markdown for untrusted fork workflows.
+**Exit codes.** `0` every required check passed, `1` a server, protocol, capability or security check failed, `2` invalid command-line input.
 
-## Exit codes
+## Reproduce the numbers
 
-| Code | Meaning |
-|---:|---|
-| `0` | Every required check passed |
-| `1` | A server, protocol, capability, or security check failed |
-| `2` | Invalid command-line input |
-
-## Compatibility and scope
-
-| Feature | Status |
-|---|---|
-| stdio transport | ✅ Supported |
-| Streamable HTTP transport | ✅ Supported for stateless `2026-07-28` endpoints |
-| MCP legacy lifecycle through `2025-11-25` | ✅ Supported over stdio |
-| MCP `2026-07-28` stateless lifecycle | ✅ Supported over Streamable HTTP |
-| JSON and Markdown reports | ✅ Supported |
-| SARIF 2.1.0 / GitHub code scanning | ✅ Supported |
-| Static tool-definition security checks | ✅ Supported |
-| Startup benchmark | ✅ Supported |
-| Tool execution fuzzing | ✅ Opt-in, bounded, destructive tools blocked by default |
-| Load / throughput benchmarking | ✅ Concurrent HTTP benchmark with p50/p95 |
-| Performance regression baselines | ✅ p95 threshold gate |
-| Tool rug-pull detection | ✅ Deterministic catalog fingerprints |
-| OAuth/API token authentication | ✅ Bearer token via environment and custom headers |
-| Legacy Streamable HTTP sessions | 🚧 Not yet supported |
-| Interactive OAuth authorization-code flow | 🚧 Not yet supported |
-
-MCP `2026-07-28` replaced `initialize` with `server/discover`. MCPGuard uses the
-Python SDK for legacy stdio sessions and a dedicated stateless HTTP client for
-the modern request envelope.
+```bash
+uv sync --group dev
+PYTHONPATH=. uv run python benchmarks/detection.py --json benchmarks/detection_results.json
+uv run python benchmarks/real_servers.py --json benchmarks/real_servers_results.json   # needs Node.js
+```
 
 ## Development
 
 ```bash
-uv sync --group dev
 uv run ruff check mcpguard/ tests/
 uv run mypy mcpguard/
 uv run pytest
 ```
 
-The test suite includes a deliberately vulnerable catalog under
-`tests/fixtures/` and verifies detection of secret exposure, tool poisoning,
-unsafe execution, malformed schemas, transport errors, and fuzzing crashes.
-
-## Releases and independent comparison
-
-Tag pushes trigger `.github/workflows/release.yml`, which builds wheel and sdist,
-creates a GitHub artifact-provenance attestation, publishes through PyPI Trusted
-Publishing, and attaches the same artifacts to a GitHub release. Configure the
-`pypi` environment and PyPI Trusted Publisher before creating a `v*` tag. The
-distribution is `mcpguard-ci`; the command and Python package remain `mcpguard`.
-
-The same workflow can be started manually from the GitHub Actions page as a
-safe dry run. Manual runs perform every build and validation step and upload the
-distributions as a workflow artifact, but the publish job is always skipped.
-See [the release guide](docs/RELEASING.md) for the exact account configuration.
-
-For repeatable black-box comparisons with MCP Inspector and MCP-Scan, see
-[the comparison protocol](docs/COMPARISON.md). It records raw machine-readable
-results and intentionally avoids unverified marketing claims.
-
-Project layout:
-
-```text
-mcpguard/
-├── checker.py    # protocol and capability checks
-├── security.py   # static tool-definition rules
-├── benchmark.py  # latency measurements
-├── fuzzer.py     # bounded JSON Schema-derived tool cases
-├── http_transport.py # stateless 2026-07-28 Streamable HTTP
-├── reporter.py   # JSON and Markdown reports
-├── transport.py  # stdio session lifecycle
-└── cli.py        # Typer commands and exit codes
-```
+Tag pushes build, test, smoke test and publish through PyPI Trusted Publishing with a provenance attestation; a manual run of the `Release` workflow is a safe dry run that never publishes. See [the release guide](docs/RELEASING.md). For a repeatable black-box comparison with other MCP tools, see [the comparison protocol](docs/COMPARISON.md), which records raw results and makes no unverified claims.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).

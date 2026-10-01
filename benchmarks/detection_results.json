@@ -1,0 +1,68 @@
+{
+  "detection": {
+    "categories": [
+      {
+        "category": "Prompt injection in the description",
+        "cases": 12,
+        "detected": 7,
+        "recall": 0.583,
+        "missed": [
+          "t7",
+          "t8",
+          "t9",
+          "t10",
+          "t11"
+        ]
+      },
+      {
+        "category": "Secret material in the description",
+        "cases": 8,
+        "detected": 6,
+        "recall": 0.75,
+        "missed": [
+          "s7",
+          "s8"
+        ]
+      },
+      {
+        "category": "Dangerous capability in the tool name",
+        "cases": 12,
+        "detected": 9,
+        "recall": 0.75,
+        "missed": [
+          "kill_process",
+          "eval_expression",
+          "system_call"
+        ]
+      },
+      {
+        "category": "Broken input schema",
+        "cases": 6,
+        "detected": 6,
+        "recall": 1.0,
+        "missed": []
+      }
+    ],
+    "overall_recall": 0.737,
+    "benign_cases": 20,
+    "benign_flagged_as_error": [
+      "reset_password",
+      "rotate_api_key"
+    ],
+    "false_positive_rate": 0.1,
+    "precision": 0.933
+  },
+  "rug_pull": {
+    "mutations": 6,
+    "detected": 6,
+    "per_mutation": {
+      "description rewritten": true,
+      "tool renamed": true,
+      "schema property added": true,
+      "annotation flipped": true,
+      "tool added": true,
+      "tool removed": true
+    },
+    "reorder_ignored": true
+  }
+}

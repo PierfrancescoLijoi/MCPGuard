@@ -1,0 +1,48 @@
+{
+  "server-everything": {
+    "server": "mcp-servers/everything",
+    "protocol_version": "2025-11-25",
+    "exit_code": 0,
+    "passed": true,
+    "seconds": 3.5,
+    "errors": [],
+    "dangerous_names": [],
+    "unbounded_schemas": 13
+  },
+  "server-memory": {
+    "server": "memory-server",
+    "protocol_version": "2025-11-25",
+    "exit_code": 0,
+    "passed": true,
+    "seconds": 3.0,
+    "errors": [],
+    "dangerous_names": [
+      "delete_entities",
+      "delete_observations",
+      "delete_relations"
+    ],
+    "unbounded_schemas": 9
+  },
+  "server-sequential-thinking": {
+    "server": "sequential-thinking-server",
+    "protocol_version": "2025-11-25",
+    "exit_code": 0,
+    "passed": true,
+    "seconds": 2.8,
+    "errors": [],
+    "dangerous_names": [],
+    "unbounded_schemas": 1
+  },
+  "server-filesystem": {
+    "server": "secure-filesystem-server",
+    "protocol_version": "2025-11-25",
+    "exit_code": 0,
+    "passed": true,
+    "seconds": 2.8,
+    "errors": [],
+    "dangerous_names": [
+      "write_file"
+    ],
+    "unbounded_schemas": 14
+  }
+}
